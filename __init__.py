@@ -7,11 +7,27 @@ from typing import Callable
 
 from .config import get_ext_dir, get_comfy_dir
 from .modules.log import logger as log
-from .modules.nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+from .modules.nodes import (
+    NODE_CLASS_MAPPINGS as node_class_mappings,
+    NODE_DISPLAY_NAME_MAPPINGS as node_display_name_mappings,
+)
+from .animatediff import (
+    NODE_CLASS_MAPPINGS as animate_node_mappings,
+    NODE_DISPLAY_NAME_MAPPINGS as animate_node_display_name_mappings,
+)
 from .modules.workflow import update_checkpoints_hash
 from .modules.art_venture import ArtVentureRunner
 
 from server import PromptServer
+
+NODE_CLASS_MAPPINGS = {
+    *node_class_mappings.items(),
+    *animate_node_mappings.items(),
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    *node_display_name_mappings.items(),
+    *animate_node_display_name_mappings.items(),
+}
 
 
 def get_web_ext_dir():
