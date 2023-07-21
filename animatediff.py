@@ -1,7 +1,10 @@
 import os
 import torch
+import time
+import hashlib
 import numpy as np
 from PIL import Image
+from typing import Dict
 
 import folder_paths
 import comfy.ldm.modules.diffusionmodules.openaimodel as openaimodel
@@ -25,7 +28,7 @@ def forward_timestep_embed(
             x = layer(x, emb)
         elif isinstance(layer, VanillaTemporalModule):
             x = layer(x, context)
-        elif isinstance(layer, (SpatialTransformer, VanillaTemporalModule)):
+        elif isinstance(layer, SpatialTransformer):
             x = layer(x, context, transformer_options)
             transformer_options["current_index"] += 1
         elif isinstance(layer, openaimodel.Upsample):
@@ -52,6 +55,9 @@ def get_model_files():
 
 
 class AnimateDiffLoader:
+    def __init__(self) -> None:
+        self.last_injected_model_hash = set()
+
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -64,7 +70,10 @@ class AnimateDiffLoader:
                     "INT",
                     {"default": 16, "min": 2, "max": 24, "step": 1},
                 ),
-            }
+            },
+            "optional": {
+                "init_latent": ("LATENT",),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "LATENT")
@@ -78,6 +87,7 @@ class AnimateDiffLoader:
         width: int,
         height: int,
         frame_number=16,
+        init_latent: Dict[str, torch.Tensor] = None,
     ):
         model = model.clone()
         model_path = os.path.join(model_dir, model_name)
@@ -98,29 +108,46 @@ class AnimateDiffLoader:
             motion_module.load_state_dict(mm_state_dict)
 
         unet = model.model.diffusion_model
-
-        logger.info(f"Injecting motion module into UNet input blocks.")
-        for mm_idx, unet_idx in enumerate([1, 2, 4, 5, 7, 8, 10, 11]):
-            mm_idx0, mm_idx1 = mm_idx // 2, mm_idx % 2
-            unet.input_blocks[unet_idx].append(
-                motion_module.down_blocks[mm_idx0].motion_modules[mm_idx1]
-            )
-
-        logger.info(f"Injecting motion module into UNet output blocks.")
-        for unet_idx in range(12):
-            mm_idx0, mm_idx1 = unet_idx // 3, unet_idx % 3
-            if unet_idx % 2 == 2:
-                unet.output_blocks[unet_idx].insert(
-                    -1, motion_module.up_blocks[mm_idx0].motion_modules[mm_idx]
-                )
-            else:
-                unet.output_blocks[unet_idx].append(
-                    motion_module.up_blocks[mm_idx0].motion_modules[mm_idx1]
+        if self.calculate_model_hash(unet) in self.last_injected_model_hash:
+            logger.info(f"Motion module already injected, skipping injection.")
+        else:
+            logger.info(f"Injecting motion module into UNet input blocks.")
+            for mm_idx, unet_idx in enumerate([1, 2, 4, 5, 7, 8, 10, 11]):
+                mm_idx0, mm_idx1 = mm_idx // 2, mm_idx % 2
+                unet.input_blocks[unet_idx].append(
+                    motion_module.down_blocks[mm_idx0].motion_modules[mm_idx1]
                 )
 
-        latent = torch.zeros([frame_number, 4, width // 8, height // 8]).cpu()
+            logger.info(f"Injecting motion module into UNet output blocks.")
+            for unet_idx in range(12):
+                mm_idx0, mm_idx1 = unet_idx // 3, unet_idx % 3
+                if unet_idx % 2 == 2:
+                    unet.output_blocks[unet_idx].insert(
+                        -1, motion_module.up_blocks[mm_idx0].motion_modules[mm_idx]
+                    )
+                else:
+                    unet.output_blocks[unet_idx].append(
+                        motion_module.up_blocks[mm_idx0].motion_modules[mm_idx1]
+                    )
+
+            self.last_injected_model_hash.add(self.calculate_model_hash(unet))
+
+        if init_latent is None:
+            latent = torch.zeros([frame_number, 4, width // 8, height // 8]).cpu()
+        else:
+            # clone value of first frame
+            latent = init_latent["samples"].clone().cpu()
+            # repeat for all frames
+            latent = latent.repeat(frame_number, 1, 1, 1)
 
         return (model, {"samples": latent})
+
+    def calculate_model_hash(self, unet):
+        t = unet.input_blocks[1]
+        m = hashlib.sha256()
+        for buf in t.buffers():
+            m.update(buf.numpy().view(np.uint8))
+        return m.hexdigest()
 
 
 class AnimateDiffCombine:
