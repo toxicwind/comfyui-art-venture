@@ -1,6 +1,9 @@
 import os
 import torch
+import numpy as np
+from PIL import Image
 
+import folder_paths
 import comfy.ldm.modules.diffusionmodules.openaimodel as openaimodel
 import comfy.model_management as model_management
 from comfy.ldm.modules.attention import SpatialTransformer
@@ -65,7 +68,7 @@ class AnimateDiffLoader:
         }
 
     RETURN_TYPES = ("MODEL", "LATENT")
-    CATEGORY = "loaders"
+    CATEGORY = "Animate Diff"
     FUNCTION = "inject_motion_modules"
 
     def inject_motion_modules(
@@ -92,9 +95,7 @@ class AnimateDiffLoader:
                 motion_module.half()
             offload_device = model_management.unet_offload_device()
             motion_module = motion_module.to(offload_device)
-
-            missed_keys = motion_module.load_state_dict(mm_state_dict)
-            logger.info(f"Missing keys {missed_keys}")
+            motion_module.load_state_dict(mm_state_dict)
 
         unet = model.model.diffusion_model
 
@@ -122,42 +123,90 @@ class AnimateDiffLoader:
         return (model, {"samples": latent})
 
 
-class RemoveAnimateDiffMotionModule:
+class AnimateDiffCombine:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model": ("MODEL",),
-                "unload_motion_module": ("BOOL", {"default": True}),
+                "images": ("IMAGE",),
+                "frame_rate": (
+                    "INT",
+                    {"default": 8, "min": 1, "max": 24, "step": 1},
+                ),
+                "loop_count": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
+                "save_image": (("Enabled", "Disabled"),),
+                "filename_prefix": ("STRING", {"default": "AnimateDiff"}),
             }
         }
 
-    RETURN_TYPES = ("MODEL",)
-    CATEGORY = "loaders"
-    FUNCTION = "remove_motion_modules"
+    RETURN_TYPES = ("IMAGE",)
+    CATEGORY = "Animate Diff"
+    OUTPUT_NODE = True
+    FUNCTION = "generate_gif"
 
-    def remove_motion_modules(self, model):
-        unet = model.model.diffusion_model
+    def generate_gif(
+        self,
+        images,
+        frame_rate: int,
+        loop_count: int,
+        save_image="Enabled",
+        filename_prefix="AnimateDiff",
+    ):
+        import imageio
 
-        logger.info(f"Removing motion module from UNet input blocks.")
-        for unet_idx in [1, 2, 4, 5, 7, 8, 10, 11]:
-            unet.input_blocks[unet_idx].pop(-1)
+        # convert images to numpy
+        image_nps = []
+        for image in images:
+            img = 255.0 * image.cpu().numpy()
+            img = np.clip(img, 0, 255).astype(np.uint8)
+            image_nps.append(img)
 
-        logger.info(f"Removing motion module from UNet output blocks.")
-        for unet_idx in range(12):
-            if unet_idx % 2 == 2:
-                unet.output_blocks[unet_idx].pop(-2)
-            else:
-                unet.output_blocks[unet_idx].pop(-1)
+        # save image
+        output_dir = (
+            folder_paths.get_output_directory()
+            if save_image == "Enabled"
+            else folder_paths.get_temp_directory()
+        )
+        (
+            full_output_folder,
+            filename,
+            counter,
+            subfolder,
+            _,
+        ) = folder_paths.get_save_image_path(filename_prefix, output_dir)
+        file = f"{filename}_{counter:05}.gif"
+        file_path = os.path.join(full_output_folder, file)
 
-        return (model,)
+        # save gif
+        imageio.mimsave(
+            file_path,
+            image_nps,
+            duration=round(1000 / frame_rate),
+            loop=loop_count,
+        )
+
+        # load saved image back as torch tensor
+        saved = Image.open(file_path)
+        saved = saved.convert("RGB")
+        saved = np.array(saved).astype(np.float32) / 255.0
+        saved = torch.from_numpy(saved)[None,]
+
+        previews = [
+            {
+                "filename": file,
+                "subfolder": subfolder,
+                "type": "output" if save_image == "Enabled" else "temp",
+            }
+        ]
+
+        return {"ui": {"images": previews}, "result": (saved,)}
 
 
 NODE_CLASS_MAPPINGS = {
     "AnimateDiffLoader": AnimateDiffLoader,
-    "RemoveAnimateDiffMotionModule": RemoveAnimateDiffMotionModule,
+    "AnimateDiffCombile": AnimateDiffCombine,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "AnimateDiffLoader": "Animate Diff Loader",
-    "RemoveAnimateDiffMotionModule": "Remove Animate Diff Motion Module",
+    "AnimateDiffCombile": "Animate Diff Combine",
 }
