@@ -2,9 +2,10 @@ import os
 import torch
 
 import comfy.ldm.modules.diffusionmodules.openaimodel as openaimodel
+import comfy.model_management as model_management
 from comfy.ldm.modules.attention import SpatialTransformer
 from comfy.utils import load_torch_file
-from comfy.sd import ModelPatcher
+from comfy.sd import ModelPatcher, calculate_parameters
 
 from .modules.log import logger
 from .modules.motion_module import MotionWrapper, VanillaTemporalModule
@@ -76,7 +77,6 @@ class AnimateDiffLoader:
         frame_number=16,
     ):
         model = model.clone()
-        print("model", model.model.diffusion_model)
         model_path = os.path.join(model_dir, model_name)
 
         global motion_module
@@ -84,6 +84,15 @@ class AnimateDiffLoader:
             logger.info(f"Loading motion module {model_name} from {model_path}")
             mm_state_dict = load_torch_file(model_path)
             motion_module = MotionWrapper()
+
+            parameters = calculate_parameters(mm_state_dict, "")
+            usefp16 = model_management.should_use_fp16(model_params=parameters)
+            if usefp16:
+                print("Using fp16, converting motion module to fp16")
+                motion_module.half()
+            offload_device = model_management.unet_offload_device()
+            motion_module = motion_module.to(offload_device)
+
             missed_keys = motion_module.load_state_dict(mm_state_dict)
             logger.info(f"Missing keys {missed_keys}")
 

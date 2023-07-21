@@ -20,14 +20,13 @@ from .modules.art_venture import ArtVentureRunner
 
 from server import PromptServer
 
-NODE_CLASS_MAPPINGS = {
-    *node_class_mappings.items(),
-    *animate_node_mappings.items(),
-}
-NODE_DISPLAY_NAME_MAPPINGS = {
-    *node_display_name_mappings.items(),
-    *animate_node_display_name_mappings.items(),
-}
+NODE_CLASS_MAPPINGS = {}
+NODE_CLASS_MAPPINGS.update(node_class_mappings)
+NODE_CLASS_MAPPINGS.update(animate_node_mappings)
+
+NODE_DISPLAY_NAME_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS.update(node_display_name_mappings)
+NODE_DISPLAY_NAME_MAPPINGS.update(animate_node_display_name_mappings)
 
 
 def get_web_ext_dir():
