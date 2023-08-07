@@ -1,12 +1,16 @@
 import os
+import io
 import time
+import base64
 import pathlib
 import requests
 import threading
 import traceback
 from uuid import uuid4
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Union
 from types import MethodType
+from aiohttp import web
+from PIL import Image
 
 from ..config import config
 from .logger import logger
@@ -16,8 +20,21 @@ import folder_paths
 from server import PromptServer
 from execution import validate_prompt, PromptExecutor
 
+Callback = Union[str, Callable]
 
-def update_task_result(callback_url: str, success: bool, images: List[str] = None):
+
+def handle_task_finished(
+    success: bool, images: List[str] = None, callback: Callback = None
+):
+    if callback is None:
+        return
+
+    data = {"success": str(success).lower()}
+    if not isinstance(callback, str):
+        data["images"] = images
+        callback(data)
+        return
+
     files = None
     if images is not None:
         files = []
@@ -34,8 +51,8 @@ def update_task_result(callback_url: str, success: bool, images: List[str] = Non
 
     return upload_to_av(
         files,
-        additional_data={"success": str(success).lower()},
-        upload_url=callback_url,
+        additional_data=data,
+        upload_url=callback,
     )
 
 
@@ -88,12 +105,33 @@ class ArtVentureRunner:
 
     def __init__(self) -> None:
         self.current_task_id: str = None
-        self.callback_url: str = None
+        self.callback: Callback = None
         self.current_task_exception = None
         self.current_thread: threading.Thread = None
         ArtVentureRunner.instance = self
 
         patch_comfy()
+
+    def register_new_task(self, prompt: Dict, callback: Callback = None):
+        if self.current_task_id is not None:
+            return (callback, Exception("Already running a task"))
+
+        valid = validate_prompt(prompt)
+        if not valid[0]:
+            logger.error(f"Invalid recipe: {valid[3]}")
+            return (callback, Exception("Invalid recipe"))
+
+        task_id = str(uuid4())
+        outputs_to_execute = valid[2]
+        PromptServer.instance.prompt_queue.put(
+            (0, task_id, prompt, {}, outputs_to_execute)
+        )
+
+        logger.info(f"Task registered with id {task_id}")
+        self.current_task_id = task_id
+        self.callback = callback
+        self.current_task_exception = None
+        return (callback, None)
 
     def get_new_task(self):
         if config.get("runner_enabled", False) != True:
@@ -112,26 +150,11 @@ class ArtVentureRunner:
             return (None, None)
 
         prompt = data.get("prompt")
-        callback_url: str = data.get("callback_url")
+        callback: str = data.get("callback_url")
         logger.info(f"Got new task")
         logger.debug(prompt)
 
-        valid = validate_prompt(prompt)
-        if not valid[0]:
-            logger.error(f"Invalid recipe: {valid[3]}")
-            return (callback_url, Exception("Invalid recipe"))
-
-        task_id = str(uuid4())
-        outputs_to_execute = valid[2]
-        PromptServer.instance.prompt_queue.put(
-            (0, task_id, prompt, {}, outputs_to_execute)
-        )
-
-        logger.info(f"Task registered with id {task_id}")
-        self.current_task_id = task_id
-        self.callback_url = callback_url
-        self.current_task_exception = None
-        return (callback_url, None)
+        return self.register_new_task(prompt, callback)
 
     def watching_for_new_task(self, get_task: Callable):
         logger.info("Watching for new task")
@@ -143,11 +166,11 @@ class ArtVentureRunner:
                 continue
 
             try:
-                callback_url, e = get_task()
-                if callback_url and e is not None:
+                callback, e = get_task()
+                if callback and e is not None:
                     logger.error("Error while getting new task")
                     logger.error(e)
-                    update_task_result(callback_url, False)
+                    handle_task_finished(callback, False)
                     failed_attempts += 1
                 else:
                     failed_attempts = 0
@@ -187,7 +210,7 @@ class ArtVentureRunner:
 
         if self.current_task_exception is not None:
             logger.info(f"Task {task_id} failed: {self.current_task_exception}")
-            update_task_result(callback_url=self.callback_url, success=False)
+            handle_task_finished(callback=self.callback, success=False)
         else:
             images = []
             outdir = folder_paths.get_output_directory()
@@ -201,12 +224,33 @@ class ArtVentureRunner:
                         images.append(os.path.join(outdir, subfolder, filename))
 
             logger.info(f"Task {task_id} finished with {len(images)} image(s)")
-            update_task_result(self.callback_url, True, images)
+            handle_task_finished(self.callback, True, images)
             if config.get("remove_runner_images_after_upload", False):
                 for img in images:
                     if os.path.exists(img):
                         os.remove(img)
 
         self.current_task_id = None
-        self.callback_url = None
+        self.callback = None
         self.current_task_exception = None
+
+
+@PromptServer.instance.routes.post("/av/task/register")
+async def register_new_task(request):
+    prompt: Dict = await request.json()
+
+    def callback(data: Dict):
+        images = data.pop("images", [])
+        base64_images = []
+        for f in images:
+            img = Image.open(os.path.abspath(f))
+            with io.BytesIO() as output_bytes:
+                img.save(output_bytes, format="PNG")
+                bytes_data = output_bytes.getvalue()
+                base64_images.append("data:image/png;base64," + base64.b64encode(bytes_data).decode("utf-8"))
+
+        data["images"] = base64_images
+
+        return web.json_response(data)
+
+    ArtVentureRunner.instance.register_new_task(prompt, callback)
