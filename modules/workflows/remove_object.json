@@ -1,0 +1,37 @@
+{
+  "prompt": {
+    "1": {
+      "inputs": {
+        "model_name": "big-lama/models/best.ckpt",
+        "device_mode": "CPU"
+      },
+      "class_type": "LamaLoader"
+    },
+    "2": {
+      "inputs": {
+        "mask_dialation": 10,
+        "lama_model": ["1", 0],
+        "image": ["3", 0],
+        "mask": ["3", 1]
+      },
+      "class_type": "LamaInpaint"
+    },
+    "3": {
+      "inputs": {
+        "url": "",
+        "keep_alpha_channel": false
+      },
+      "class_type": "LoadImageFromUrl"
+    },
+    "4": {
+      "inputs": {
+        "filename_prefix": "inpaint_remove",
+        "images": ["2", 0]
+      },
+      "class_type": "SaveImage"
+    }
+  },
+  "args": {
+    "image": ["3.inputs.url"]
+  }
+}

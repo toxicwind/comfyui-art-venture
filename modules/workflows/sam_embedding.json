@@ -1,0 +1,42 @@
+
+{
+  "prompt": {
+    "1": {
+      "inputs": {
+        "model_name": "sam_vit_h_4b8939.pth",
+        "device_mode": "AUTO"
+      },
+      "class_type": "SAMLoader"
+    },
+    "2": {
+      "inputs": {
+        "sam_model": ["1", 0],
+        "image": ["3", 0]
+      },
+      "class_type": "GetSAMEmbedding"
+    },
+    "3": {
+      "inputs": {
+        "url": "",
+        "keep_alpha_channel": false
+      },
+      "class_type": "LoadImageFromUrl"
+    },
+    "4": {
+      "inputs": {
+        "embedding": ["2", 0]
+      },
+      "class_type": "SAMEmbeddingToImage"
+    },
+    "5": {
+      "inputs": {
+        "filename_prefix": "sam_embedding",
+        "images": ["4", 0]
+      },
+      "class_type": "SaveImage"
+    }
+  },
+  "args": {
+    "image": ["3.inputs.url"]
+  }
+}

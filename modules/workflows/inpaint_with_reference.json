@@ -1,0 +1,116 @@
+{
+  "prompt": {
+    "1": {
+      "inputs": {
+        "ckpt_name": "DreamShaper_v8-inpainting.safetensors",
+        "vae_name": "vae-ft-mse-840000-ema-pruned.safetensors",
+        "clip_skip": -1,
+        "lora_name": "None",
+        "lora_model_strength": 1,
+        "lora_clip_strength": 1,
+        "positive": "masterpiece, best quality",
+        "negative": "embedding:easynegative, embedding:bad-image-v2-39000, embedding:badhandv4, embedding:bad-hands-5",
+        "empty_latent_width": 512,
+        "empty_latent_height": 512,
+        "batch_size": 1
+      },
+      "class_type": "Efficient Loader"
+    },
+    "3": {
+      "inputs": {
+        "samples": ["6", 0],
+        "mask": ["23", 1]
+      },
+      "class_type": "SetLatentNoiseMask"
+    },
+    "5": {
+      "inputs": {
+        "sampler_state": "Sample",
+        "seed": 26105802993072,
+        "steps": 20,
+        "cfg": 7,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1,
+        "preview_method": "none",
+        "vae_decode": "true",
+        "sharpness": 2,
+        "model": ["30", 0],
+        "positive": ["1", 1],
+        "negative": ["1", 2],
+        "latent_image": ["3", 0],
+        "optional_vae": ["1", 4]
+      },
+      "class_type": "Fooocus_KSamplerEfficient"
+    },
+    "6": {
+      "inputs": {
+        "grow_mask_by": 6,
+        "pixels": ["23", 0],
+        "vae": ["1", 4],
+        "mask": ["23", 1]
+      },
+      "class_type": "VAEEncodeForInpaint"
+    },
+    "23": {
+      "inputs": {
+        "url": ""
+      },
+      "class_type": "LoadImageFromUrl"
+    },
+    "27": {
+      "inputs": {
+        "url": ["34", 0],
+        "keep_alpha_channel": false
+      },
+      "class_type": "LoadImageFromUrl"
+    },
+    "30": {
+      "inputs": {
+        "weight": 1,
+        "model_name": "ip-adapter-plus_sd15.bin",
+        "clip_name": "sd21_clip_vision.safetensors",
+        "dtype": "fp16",
+        "apply": ["31", 0],
+        "model": ["1", 0],
+        "image": ["27", 0]
+      },
+      "class_type": "AV_IPAdapter"
+    },
+    "31": {
+      "inputs": {
+        "cmp": "a <> b",
+        "a": ["36", 0],
+        "b": ["33", 0]
+      },
+      "class_type": "ImpactCompare"
+    },
+    "33": {
+      "inputs": {
+        "Text": "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+      },
+      "class_type": "Text"
+    },
+    "34": {
+      "inputs": {
+        "Text": ""
+      },
+      "class_type": "Text"
+    },
+    "36": {
+      "inputs": {
+        "python_expression": "a if a != \"\" else b",
+        "print_to_console": "False",
+        "a": ["34", 0],
+        "b": ["33", 0],
+        "c": ""
+      },
+      "class_type": "Evaluate Strings"
+    }
+  },
+  "args": {
+    "image": ["23.inputs.url"],
+    "prompt": ["1.inputs.positive"],
+    "ref_image": ["34.inputs.Text"]
+  }
+}

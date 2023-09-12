@@ -1,8 +1,11 @@
 import os
 import time
+import torch
+import numpy as np
 import requests
 import traceback
 from typing import Callable, Dict
+from PIL import Image
 
 from ..config import config
 from .logger import logger
@@ -178,3 +181,18 @@ def load_module(module_path):
     module_spec.loader.exec_module(module)
 
     return module
+
+
+def tensor2pil(image: torch.Tensor) -> Image.Image:
+    return Image.fromarray(
+        np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8)
+    )
+
+
+def pil2tensor(image: Image.Image) -> torch.Tensor:
+    # Takes a PIL image and returns a tensor of shape [1, height, width, channels]
+    image = np.array(image).astype(np.float32) / 255.0
+    image = torch.from_numpy(image).unsqueeze(0)
+    if len(image.shape) == 3:  # If the image is grayscale, add a channel dimension
+        image = image.unsqueeze(-1)
+    return image
