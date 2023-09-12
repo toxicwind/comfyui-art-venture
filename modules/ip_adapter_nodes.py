@@ -11,8 +11,8 @@ from .utils import load_module
 custom_nodes = folder_paths.get_folder_paths("custom_nodes")
 ip_adapter_dir_names = ["IPAdapter", "IPAdapter-ComfyUI"]
 
-folder_paths.folder_names_and_paths["ip-adapter"] = (
-    [os.path.join(folder_paths.models_dir, "ip-adapter")],
+folder_paths.folder_names_and_paths["ip_adapter"] = (
+    [os.path.join(folder_paths.models_dir, "ip_adapter")],
     folder_paths.supported_pt_extensions,
 )
 
@@ -53,7 +53,7 @@ try:
                         "FLOAT",
                         {"default": 1, "min": -1, "max": 3, "step": 0.05},
                     ),
-                    "model_name": (folder_paths.get_filename_list("ip-adapter"),),
+                    "model_name": (folder_paths.get_filename_list("ip_adapter"),),
                     "clip_name": (folder_paths.get_filename_list("clip_vision"),),
                     "dtype": (["fp16", "fp32"],),
                 },
