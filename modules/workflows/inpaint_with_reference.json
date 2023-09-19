@@ -68,8 +68,8 @@
     "30": {
       "inputs": {
         "weight": 1,
-        "model_name": "ip-adapter-plus_sd15.bin",
-        "clip_name": "sd21_clip_vision.safetensors",
+        "model_name": "ip_adapter_sd15_plus.pth",
+        "clip_name": "sd21_clip_vision.fp16.safetensors",
         "dtype": "fp16",
         "apply": ["31", 0],
         "model": ["1", 0],

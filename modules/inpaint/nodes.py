@@ -11,9 +11,6 @@ import folder_paths
 import comfy.model_management
 from comfy.utils import load_torch_file
 
-print(os.path.join(os.path.dirname(__file__), "lama"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lama"))
-
 from ..utils import tensor2pil, pil2tensor
 
 models_path = folder_paths.models_dir
@@ -52,13 +49,10 @@ class GetSAMEmbedding:
             predictor.set_image(image, "RGB")
             embedding = predictor.get_image_embedding().cpu().numpy()
 
-            print("embedding", embedding.shape)
-
+            return (embedding,)
         finally:
             if sam_model.is_auto_mode:
                 sam_model.to(device="cpu")
-
-        return (embedding,)
 
 
 class SAMEmbeddingToImage:
@@ -178,12 +172,10 @@ class LamaInpaint:
             if mask_dialation > 0:
                 mask = dilate_mask(mask, mask_dialation)
             if np.max(mask) <= 1:
-                print("scale mask to 255")
                 mask = mask * 255
 
             img = image.float()
             mask = torch.from_numpy(mask).float()
-            print("img", img.shape, img)
 
             batch = {}
             batch["image"] = img.permute(0, 3, 1, 2)
